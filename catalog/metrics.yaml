@@ -26,6 +26,13 @@ metrics:
     better: higher
     description: Gross gaming revenue (stake minus payout) per exposed player in the window
 
+  - name: stake_per_player
+    kind: continuous
+    num: stake
+    pre: pre_stake
+    better: higher
+    description: Turnover (sum of stakes) per exposed player in the window
+
   - name: bets_per_player
     kind: continuous
     num: bets
