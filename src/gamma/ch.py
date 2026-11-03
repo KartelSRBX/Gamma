@@ -17,13 +17,13 @@ PASSWORD = os.environ.get("CH_PASSWORD", "gamma")
 DATABASE = os.environ.get("CH_DATABASE", "gamma")
 
 
-def connect(**settings: object) -> Client:
+def connect(database: str | None = None, **settings: object) -> Client:
     return clickhouse_connect.get_client(
         host=HOST,
         port=PORT,
         username=USER,
         password=PASSWORD,
-        database=DATABASE,
+        database=database or DATABASE,
         send_receive_timeout=300,
         settings=settings,
     )

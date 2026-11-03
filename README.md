@@ -8,10 +8,11 @@ can be **checked against a world whose truth is known**.
 
 Stage 1 is the data side: experiments as reviewed YAML, deterministic assignment, an exposure log,
 ClickHouse marts with one row per player, and a simulator that plants one real effect, two false
-alarms and two data-quality bugs. Stage 2 (this one) is the statistics, and the proof that they work.
+alarms and two data-quality bugs. Stage 2 is the statistics, and the proof that they work. Stage 3
+turns an analysis into a decision: a verdict by explicit rules, a report, results stored in ClickHouse
+for Grafana and Tableau, and benchmarks.
 
-> Status: stage 2 of 3. Stage 3 adds the report with a ship / don't-ship verdict, dashboards and
-> benchmarks.
+![The experiment dashboard on the real win](docs/img/experiment.png)
 
 ## What it shows
 
@@ -26,6 +27,9 @@ alarms and two data-quality bugs. Stage 2 (this one) is the statistics, and the 
 | Several metrics | Primary at alpha; secondary adjusted with Holm; guardrails as one-sided **non-inferiority** tests with a margin: `ok`, `violated`, or `inconclusive`, which is not a pass |
 | Planning | `gamma plan`: players per arm and days of enrollment from the pre-period, with and without CUPED |
 | Looking early | O'Brien-Fleming group-sequential boundaries, computed by numerical integration; checked by simulation to hold 5% across 5 looks where naive peeking gives 13% |
+| Verdict | `gamma report`: INVALID, WAIT, DO NOT SHIP, HOLD, SHIP, NO EFFECT or INCONCLUSIVE by ordered rules ([How a verdict is made](#how-a-verdict-is-made)), as a one-page Markdown report with the checks, results, segments and metric definitions |
+| Results as data | Every run is stored (`experiment_runs`, `experiment_results`) with views of the latest run; Grafana and Tableau read conclusions instead of recomputing them; `gamma export` writes CSV |
+| Dashboard as code | `grafana/build_dashboards.py` builds the dashboard JSON; CI fails if the committed JSON drifts |
 | Tested against truth | The simulator is the ground truth. The mart is checked against an independent Python recomputation, the planted effect and bugs are found by the analysis, and [the methods themselves are validated by simulation](docs/validation.md) |
 
 ## Architecture
@@ -41,7 +45,11 @@ flowchart LR
     M --> U[("mart_user_metrics<br/>1 row / player / experiment")]
     U --> Q["checks<br/>SRM, balance, early look"]
     Q --> ST["estimators<br/>z, Welch, delta, CUPED<br/>Holm, guardrails"]
-    ST -. "stage 3" .-> RP["report + dashboard"]
+    ST --> VD["verdict rules"]
+    VD --> RP["report (Markdown)"]
+    VD --> RS[("experiment_runs<br/>experiment_results")]
+    RS --> GF["Grafana"]
+    RS --> TB["Tableau / CSV"]
     V["validation<br/>A/A, power, coverage,<br/>peeking, SRM"] --> ST
 ```
 
@@ -51,10 +59,12 @@ Requirements: Docker with Compose v2, Python 3.11+.
 
 ```bash
 make dev && . .venv/bin/activate   # the `gamma` command
-make up       # ClickHouse, then the schema
+make up       # ClickHouse and Grafana, then the schema
 make sim      # 200k players, ~5.2M bets, then the marts of all three experiments
 make plan E=welcome_bonus      # players per arm and days needed
 make analyze E=welcome_bonus   # checks, then estimates
+make report                    # verdict + report of every experiment into reports/, results into ClickHouse
+make bench                     # scaling benchmarks in a scratch database
 make validate                  # the statistics, checked by simulation (about 80 s), writes docs/validation.md
 make test e2e                  # unit tests, then the end-to-end tests against the database
 ```
@@ -155,6 +165,49 @@ reports `EARLY LOOK`, includes only players with a complete window, and warns th
 valid for a decision. The honest alternatives are to wait for the horizon or to plan the looks in advance
 with the boundaries in `gamma.stats.sequential`: the next section shows what peeking does without them.
 
+## How a verdict is made
+
+`gamma report` applies these rules in order (`src/gamma/verdict.py`); the first that fires decides.
+
+| # | Question | Answer | Decision |
+| --- | --- | --- | --- |
+| 1 | Is the data trustworthy (sample ratio, pre-period balance)? | no | **INVALID**: no number is read as a finding, estimates are shown for diagnosis only |
+| 2 | Is it the planned horizon? | no | **WAIT**: a fixed-horizon test is read once |
+| 3 | Is a guardrail clearly broken? | yes | **DO NOT SHIP**, whatever the primary metric did |
+| 4 | Did the primary metric move significantly the right way? | yes, guardrails `ok` | **SHIP** |
+| | | yes, a guardrail `inconclusive` | **HOLD**: an undecided guardrail is not a pass |
+| | | yes, the wrong way | **DO NOT SHIP** |
+| | | no, and the interval rules out the planned effect | **NO EFFECT**: stop, a clear null is information |
+| | | no, and it does not | **INCONCLUSIVE**: extend, or accept that the effect is below what matters |
+
+On the simulated world the three experiments get three different decisions, each asserted in the tests.
+The reports are committed so they can be read without running anything:
+
+| Experiment | Decision | Why |
+| --- | --- | --- |
+| [`welcome_bonus`](reports/welcome_bonus.md) | **SHIP** | conversion +4.0% (interval +2.1% to +6.0%), turnover guardrail `ok` |
+| [`cashier_flow`](reports/cashier_flow.md) | **INVALID** | sample ratio mismatch, p = 1.9e-90: the logging bug is caught before anyone reads a number |
+| [`lobby_layout`](reports/lobby_layout.md) | **NO EFFECT** | bets per player +0.2% (-0.3% to +0.6%): an improvement of 3% or more is ruled out |
+
+Each report also has a segment breakdown of the primary metric (player segment, device, country),
+labelled exploratory, with Holm adjustment inside each dimension. In `welcome_bonus` the
+segments agree within noise (the negative `ME` and `MK` rows have Holm p = 1.0), and the ones that
+reach significance are simply the biggest groups. There is no evidence of a different effect anywhere.
+
+## Dashboard and BI
+
+`make up` also starts Grafana (http://localhost:3000, anonymous viewer, `admin`/`admin`) with a
+provisioned ClickHouse datasource and the dashboard *Gamma / Experiment*. It reads the stored
+conclusions (`gamma report --save`, or `make report`) and monitors the enrollment from the mart; it
+computes no statistics, so there is one place that decides what the numbers are. The same experiment
+that is a green **SHIP** above looks like this when the logging bug is in it:
+
+![The dashboard on the experiment with the logging bug](docs/img/experiment-invalid.png)
+
+For Tableau, connect to ClickHouse (the JDBC or the native connector) and use the views
+`v_latest_results` (one row per metric and per segment, with the decision) and `v_latest_run`, plus
+`mart_user_metrics` for player-level work; or run `make export` and open the two CSV files.
+
 ## Do the methods keep their promises?
 
 [`docs/validation.md`](docs/validation.md), generated by `gamma validate`, tests the production
@@ -206,7 +259,7 @@ For each experiment, in one SQL statement (`src/gamma/marts.py`):
 
 ## Tests
 
-`make test` runs 65 unit tests in about 20 s; `make e2e` and the CI job run 28 database tests against
+`make test` runs 77 unit tests in about 20 s; `make e2e` and the CI job run 34 database tests against
 a real ClickHouse with the fixed-seed 200k-player world, so results are exact.
 
 | Test | What it proves |
@@ -217,6 +270,8 @@ a real ClickHouse with the fixed-seed 200k-player world, so results are exact.
 | Welch equals `scipy.ttest_ind`, the z-test equals the chi-square test, delta-method SE equals a bootstrap of players, CUPED is shift-invariant and keeps the effect | The estimators are the textbook ones |
 | Sample size equals the published 14,750 for 10% -> 11%; power at the prescribed size is 80% | The design formulas are right |
 | Holm and BH match worked examples; boundaries hold 5% over 200k simulated paths while naive 1.96 gives over 10% | Multiplicity and sequential plans are right |
+| Verdict rules on synthetic analyses with a chosen truth: an SRM overrides a win, an early look waits, a broken guardrail blocks a win, an undecided guardrail is a HOLD, a tight null stops, a wide null is inconclusive | Every branch of the decision table is exercised |
+| Reports and results tables: the three simulated experiments get SHIP, INVALID and NO EFFECT; the views show only the latest run | The conclusions are stored and read back correctly |
 | Analysis of the simulated world: lift found with interval around the truth, null not significant, logging bug makes the test invalid, noisy guardrail is `inconclusive`, early look flagged | The whole chain gives the conclusions the scenario implies |
 
 ## Numbers
@@ -228,8 +283,9 @@ One 4-core machine, ClickHouse 24.8 in Docker, 200k players (`make sim`):
 | Generate the world | 2.4 s: 5.19M bets, 339k deposits, 973k exposure rows |
 | Load into ClickHouse | 6.6 s |
 | Build a mart | 0.4 to 0.6 s per experiment, 388k player rows in total |
-| Analysis of one experiment | about 3 s, including the mart rebuild and a 1,000-resample bootstrap per money metric |
+| Analysis of one experiment | 1.0 s at 200k players, 2.3 s with the bootstrap of the money metrics; 4.3 s at 400k ([benchmarks](docs/benchmarks.md)) |
 | Validation, 2,000 trials per row | 80 s on 1 core |
+| Scaling, 50k to 400k players (8x) | marts 9.7x, analysis 4.8x: roughly linear. All estimators together take 0.02 s at 400k; the time is the mart rebuild (0.9 s), reading it (0.3 s) and the bootstrap (3.1 s) |
 | Disk | bets 44.1 MiB, mart 15.5 MiB, exposures 6.5 MiB, deposits 3.2 MiB |
 
 ## Limits, on purpose
@@ -244,4 +300,7 @@ One 4-core machine, ClickHouse 24.8 in Docker, 200k players (`make sim`):
 - **No calendar effects.** Real casinos have weekday and payday seasonality; a full-week window
   (7 days) is used so that the effect is balanced even where seasonality exists.
 - **Validation uses one population** of 196k players, re-split many times.
-- The verdict (ship / don't ship), dashboards and benchmarks are not here yet.
+- **Verdict thresholds are defaults, not policy.** The guardrail margins live in each experiment's YAML;
+  how much risk a company accepts for a given lift is a decision for its owners, which is why an
+  undecided guardrail ends in HOLD instead of a guess.
+- **The dashboard shows stored results.** If nobody runs `gamma report --save`, it shows the last run.

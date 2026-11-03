@@ -11,9 +11,11 @@ dev: ## Create .venv with the package and dev tools
 check: ## Validate experiment definitions and the metric catalog
 	$(GAMMA) check
 
-up: ## Start ClickHouse and apply the schema
+up: ## Start ClickHouse and Grafana, then apply the schema
 	$(COMPOSE) up -d --wait
 	$(GAMMA) migrate
+	@echo "Grafana:    http://localhost:3000   (Gamma / Experiment; admin/admin)"
+	@echo "ClickHouse: http://localhost:8123/play  (gamma / gamma)"
 
 sim: ## Generate the synthetic casino (200k players) and build the marts
 	$(GAMMA) simulate
@@ -24,6 +26,15 @@ plan: ## Players per arm and days needed: make plan E=welcome_bonus
 
 analyze: ## Checks, then estimates: make analyze E=welcome_bonus
 	$(GAMMA) analyze $(E)
+
+report: ## Verdict and report of every experiment into reports/, results saved to ClickHouse
+	$(GAMMA) report --all --out reports --save
+
+export: ## CSV of results and player marts for Tableau or any BI tool
+	$(GAMMA) export --out export
+
+bench: ## Scaling benchmarks in a scratch database (about 2 minutes), writes docs/benchmarks.md
+	$(GAMMA) bench --out docs/benchmarks.md
 
 validate: ## Check the statistics by simulation (about 80 s), writes docs/validation.md
 	$(GAMMA) validate --out docs/validation.md
