@@ -1,0 +1,22 @@
+key: lobby_layout
+layer: lobby
+owner: product
+hypothesis: >
+  A game lobby sorted by personal history instead of popularity increases the number of bets
+  per player.
+start: 2026-09-01
+enrollment_days: 14
+window_days: 7
+pre_days: 14
+buckets: [0, 9999]
+variants:
+  - { name: control, weight: 50 }
+  - { name: treatment, weight: 50 }
+primary: bets_per_player
+secondary: [ggr_per_player, margin]
+guardrails:
+  - { metric: avg_stake, max_relative_drop: 0.10 }
+design:
+  alpha: 0.05
+  power: 0.8
+  mde: 0.03

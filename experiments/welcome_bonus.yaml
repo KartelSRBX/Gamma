@@ -1,0 +1,22 @@
+key: welcome_bonus
+layer: promo
+owner: growth
+hypothesis: >
+  Raising the first-deposit bonus cap from 50 to 100 EUR makes more players deposit within
+  7 days of seeing the offer, without lowering revenue per player.
+start: 2026-09-01
+enrollment_days: 14
+window_days: 7
+pre_days: 14
+buckets: [0, 4999]
+variants:
+  - { name: control, weight: 50 }
+  - { name: treatment, weight: 50 }
+primary: deposit_conversion
+secondary: [deposit_per_player, bets_per_player]
+guardrails:
+  - { metric: ggr_per_player, max_relative_drop: 0.05 }
+design:
+  alpha: 0.05
+  power: 0.8
+  mde: 0.05
