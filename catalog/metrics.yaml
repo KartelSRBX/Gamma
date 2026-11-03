@@ -1,0 +1,48 @@
+# The metric catalog: one definition per metric, shared by every experiment.
+# `num` and `den` are columns of mart_user_metrics; `pre` is the same quantity measured before
+# exposure, used for variance reduction (CUPED).
+#   binary      share of players with num = 1
+#   continuous  mean per player of num
+#   ratio       sum(num) / sum(den) over players (a ratio of means, so it needs the delta method)
+metrics:
+  - name: deposit_conversion
+    kind: binary
+    num: converted
+    pre: pre_converted
+    better: higher
+    description: Share of players who deposited within the window after exposure
+
+  - name: deposit_per_player
+    kind: continuous
+    num: deposit_amount
+    pre: pre_deposit_amount
+    better: higher
+    description: Deposited amount per exposed player in the window (heavy right tail)
+
+  - name: ggr_per_player
+    kind: continuous
+    num: ggr
+    pre: pre_ggr
+    better: higher
+    description: Gross gaming revenue (stake minus payout) per exposed player in the window
+
+  - name: bets_per_player
+    kind: continuous
+    num: bets
+    pre: pre_bets
+    better: higher
+    description: Bets placed per exposed player in the window
+
+  - name: margin
+    kind: ratio
+    num: ggr
+    den: stake
+    better: higher
+    description: Hold, ggr / stake, over all players of the arm (a ratio of sums)
+
+  - name: avg_stake
+    kind: ratio
+    num: stake
+    den: bets
+    better: lower
+    description: Average stake per bet. Guardrail for responsible gaming, a rise is not a win

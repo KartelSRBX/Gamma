@@ -1,0 +1,23 @@
+# The world the simulator generates. It is the ground truth: the analysis code never reads this
+# file, tests compare what the analysis finds against it.
+seed: 20260901
+players: 200000
+
+# Effects are multipliers on a player's rates after first exposure to the variant.
+# Only one experiment may carry a real effect: events are generated with a single change point
+# per player, which keeps the generator exact instead of approximately right for overlaps.
+truth:
+  welcome_bonus:
+    treatment: { deposit_rate: 1.12, bet_rate: 1.04 }
+  cashier_flow:
+    treatment: {}          # no real effect
+  lobby_layout:
+    treatment: {}          # no real effect: the experiment that must NOT come out significant
+
+# Data-quality bugs, injected on purpose so that the checks in the analysis have something to catch.
+faults:
+  # Logging bug: the new cashier on iOS fails to send the exposure event for 35% of players.
+  # The players are treated and behave accordingly, but vanish from the exposure log.
+  - { kind: drop_exposure, experiment: cashier_flow, variant: treatment, device: ios, rate: 0.35 }
+  # A mid-test config change flips a few players to the other variant on a later visit.
+  - { kind: crossover, experiment: lobby_layout, rate: 0.004 }
