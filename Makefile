@@ -19,6 +19,15 @@ sim: ## Generate the synthetic casino (200k players) and build the marts
 	$(GAMMA) simulate
 	$(GAMMA) mart
 
+plan: ## Players per arm and days needed: make plan E=welcome_bonus
+	$(GAMMA) plan $(E)
+
+analyze: ## Checks, then estimates: make analyze E=welcome_bonus
+	$(GAMMA) analyze $(E)
+
+validate: ## Check the statistics by simulation (about 80 s), writes docs/validation.md
+	$(GAMMA) validate --out docs/validation.md
+
 status: ## Row counts and the arms of every experiment
 	$(GAMMA) status
 

@@ -7,7 +7,7 @@ hypothesis: >
 start: 2026-09-01
 enrollment_days: 14
 window_days: 7
-pre_days: 14
+pre_days: 7
 buckets: [0, 9999]
 variants:
   - { name: control, weight: 50 }

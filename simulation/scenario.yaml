@@ -8,7 +8,7 @@ players: 200000
 # per player, which keeps the generator exact instead of approximately right for overlaps.
 truth:
   welcome_bonus:
-    treatment: { deposit_rate: 1.12, bet_rate: 1.04 }
+    treatment: { deposit_rate: 1.06, bet_rate: 1.02 }
   cashier_flow:
     treatment: {}          # no real effect
   lobby_layout:

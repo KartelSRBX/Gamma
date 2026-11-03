@@ -46,6 +46,14 @@ jobs:
         run: pytest -m e2e tests/e2e -v --tb=short -rA
       - name: Show the arms
         run: gamma status
+      - name: Plan and analyse every experiment
+        run: |
+          for e in welcome_bonus cashier_flow lobby_layout; do
+            gamma plan $e
+            gamma analyze $e
+          done
+      - name: The method checks run end to end (a short run, the numbers are not the published ones)
+        run: gamma validate --trials 100 --out /tmp/validation.md
       - name: ClickHouse log on failure
         if: failure()
         run: docker compose -f deploy/docker-compose.yml logs --tail 200 clickhouse

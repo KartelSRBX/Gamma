@@ -6,7 +6,7 @@ hypothesis: >
 start: 2026-09-01
 enrollment_days: 14
 window_days: 7
-pre_days: 14
+pre_days: 7
 # Shares the promo layer with welcome_bonus, so it gets the other half of the buckets and no
 # player can be in both.
 buckets: [5000, 9999]
@@ -20,4 +20,4 @@ guardrails:
 design:
   alpha: 0.05
   power: 0.8
-  mde: 0.05
+  mde: 0.03

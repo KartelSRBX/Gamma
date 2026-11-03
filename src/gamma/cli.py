@@ -7,7 +7,8 @@ import sys
 import time
 from datetime import datetime
 
-from . import ch, marts, status
+from . import analyze as analysis
+from . import ch, marts, plan, status
 from .assign import assign, bucket
 from .config import load_catalog
 from .migrate import migrate
@@ -79,6 +80,34 @@ def _status(_: argparse.Namespace) -> int:
     return 0
 
 
+def _analyze(args: argparse.Namespace) -> int:
+    cat = load_catalog()
+    exp = cat.experiments[args.experiment]
+    as_of = datetime.fromisoformat(args.as_of) if args.as_of else None
+    print(analysis.render(analysis.analyze(ch.connect(), exp, cat.metrics, as_of)))
+    return 0
+
+
+def _plan(args: argparse.Namespace) -> int:
+    cat = load_catalog()
+    print(plan.render(ch.connect(), cat.experiments[args.experiment], cat.metrics, args.mde))
+    return 0
+
+
+def _validate(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from .stats import validation_report
+
+    text = validation_report.run(ch.connect(), load_catalog(), trials=args.trials)
+    if args.out:
+        Path(args.out).write_text(text)
+        print(f"wrote {args.out}")
+    else:
+        print(text)
+    return 0
+
+
 def _assign(args: argparse.Namespace) -> int:
     exp = load_catalog().experiments[args.experiment]
     print(
@@ -106,6 +135,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(fn=_mart)
     sub.add_parser("status", help="row counts and arms").set_defaults(fn=_status)
+    p = sub.add_parser("analyze", help="checks and estimates of one experiment")
+    p.add_argument("experiment")
+    p.add_argument("--as-of", help="analysis date, ISO format; an early date is flagged")
+    p.set_defaults(fn=_analyze)
+    p = sub.add_parser("plan", help="sample size and duration of an experiment")
+    p.add_argument("experiment")
+    p.add_argument("--mde", type=float, help="relative change to detect; default: the definition's")
+    p.set_defaults(fn=_plan)
+    p = sub.add_parser("validate", help="check the statistics by simulation (minutes)")
+    p.add_argument("--trials", type=int, default=2000)
+    p.add_argument("--out", help="write Markdown here, e.g. docs/validation.md")
+    p.set_defaults(fn=_validate)
     p = sub.add_parser("assign", help="which variant does a player get")
     p.add_argument("experiment")
     p.add_argument("player", type=int)
