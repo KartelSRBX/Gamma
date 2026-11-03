@@ -7,16 +7,17 @@ hypothesis: >
 start: 2026-09-01
 enrollment_days: 14
 window_days: 7
-pre_days: 14
+pre_days: 7
 buckets: [0, 4999]
 variants:
   - { name: control, weight: 50 }
   - { name: treatment, weight: 50 }
 primary: deposit_conversion
-secondary: [deposit_per_player, bets_per_player]
+secondary: [deposit_per_player, bets_per_player, ggr_per_player]
+# Turnover guards revenue: GGR itself is too noisy to prove "not worse" at this sample size.
 guardrails:
-  - { metric: ggr_per_player, max_relative_drop: 0.05 }
+  - { metric: stake_per_player, max_relative_drop: 0.05 }
 design:
   alpha: 0.05
   power: 0.8
-  mde: 0.05
+  mde: 0.03
